@@ -1,0 +1,158 @@
+---
+title: "hyperparameter tuning with tidymodels"
+output: github_document
+---
+
+### setup
+
+```{r message = F, warning = F}
+library(tidyverse)
+library(tidymodels)
+library(janitor)
+library(tvthemes)
+library(countrycode)
+library(GGally)
+options(scipen = 999)
+
+theme_custom = theme_avatar() +
+  theme(plot.title = element_text(hjust = 0.5),
+        panel.grid.major = element_line(linewidth = 0.5, colour = "#D6D0C4"),
+        panel.grid.minor = element_line(linewidth = 0.5, colour = "#D6D0C4"))
+
+theme_set(theme_custom)
+```
+
+### data import
+
+```{r}
+link = "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-02-18/food_consumption.csv"
+food_consumption = read_csv(link, col_types = cols())
+glimpse(food_consumption)
+```
+
+### adding `continent` variable
+
+```{r}
+food_consumption = food_consumption |>
+  mutate(continent = countrycode(country, origin = "country.name", destination = "continent"))
+
+food_consumption |>
+  count(continent) |>
+  ggplot(aes(reorder(continent, -n), n)) +
+  geom_col(aes(fill = continent), show.legend = F) +
+  geom_text(aes(label = n), size = 3.5, vjust = -0.5) +
+  labs(x = NULL, y = "count", title = "continent counts") +
+  theme(axis.text.y = element_blank())
+```
+
+### reformatting data + adding `in_asia` variable
+
+```{r}
+food = food_consumption |>
+  select(-co2_emmission) |>
+  pivot_wider(names_from = "food_category", values_from = "consumption") |>
+  clean_names() |>
+  mutate(in_asia = ifelse(continent == "Asia", "Asia", "Other")) |>
+  select(-country, -continent) |>
+  mutate_if(is.character, factor)
+
+sample_n(food, 10)
+```
+
+### using `ggscatmat` to produce pairwise plots
+
+```{r warning = F}
+food |>
+  ggscatmat(columns = 1:11, color = "in_asia", alpha = 0.5)
+```
+
+### creating bootstrap data
+
+```{r}
+set.seed(1234)
+food_boot = bootstraps(food, times = 30)
+food_boot
+```
+
+### building model specification
+
+```{r}
+rf_spec = rand_forest(mode = "classification", trees = 1000,
+            mtry = tune(), min_n = tune()) |>
+  set_engine("ranger")
+
+rf_spec
+```
+
+### model tuning
+
+```{r warning = F}
+doParallel::registerDoParallel()
+rf_grid = tune_grid(rf_spec, in_asia ~ ., food_boot)
+rf_grid
+```
+
+### viewing tuning results
+
+```{r}
+collect_metrics(rf_grid)
+```
+
+### showing best performing models
+
+```{r}
+show_best(rf_grid, "roc_auc", n = 5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
